@@ -1,7 +1,7 @@
 #
 # Fetching and extracting data from JSON using the luftdaten API
 #
-
+import Geohash
 import requests
 import json
 import pandas as pd
@@ -27,7 +27,6 @@ def getRequest(url):
 
     return json_data, air_response, json_data2
 
-
 #Normalize the list of dictionaries received from the request
 def normalize(json_data):
     normal_data = pd.io.json.json_normalize(json_data)
@@ -36,14 +35,20 @@ def normalize(json_data):
 
 #Extract timestamp from normalized data
 def extractTime_Location(data):
-    timelocation_data = data[["timestamp", "location.latitude", "location.longitude"]]
+    time_data = data[["timestamp"]]
+    location_data = data[["location.latitude", "location.longitude"]]
 
-    return timelocation_data
+    return time_data, location_data
+
+# #Convert location to geohash
+# def convert_location(location_data):
+#     for row in location_data.iterrows():
+#         Geohash.encode(location_data["location.latitude"], location_data["location.longitude"])
+
 
 #Extract sensor values from normalized data
 def extractSensorValues(data):
     sensor_values = data[["sensordatavalues"]]
-
     return sensor_values
 
 #Transform sensor values pd to dictionary
@@ -59,6 +64,10 @@ def dataFrametoExel(dataframe, filename):
     dataframe.to_excel(writer, index=False)
     writer.save()
 
+#Extract data from the values sensordatavalues column stuff, datatypes are temperature, pressure ..
+def sensor_data_values(sensorValues,datatype):
+    sensor_data = pd.concat([pd.DataFrame(x) for x in sensorValues['sensordatavalues']]).reset_index(level=0, drop=True)
+    return sensor_data.loc[sensor_data['value_type'] == str(datatype)]
 
 def main():
     # define a variable to hold the source URL
@@ -75,31 +84,52 @@ def main():
     #     print("Received an error from server, cannot retrieve results " + str(webUrl.getcode()))
 
     #get data from json
-    json_data, air_response, json_data2 = getRequest(luftdaten_API_url)
+    json_data, air_response, json_data2  = getRequest(luftdaten_API_url)
 
     #normalize all the data
     normal_data = normalize(json_data)
+
+    #Extract timestamp and location from normalized data
+    time_data, location_data = extractTime_Location(normal_data)
+
+    # --> Currently here, trying to convert location to geohash
+    #Convert location to geohash
+    # convert_location(location_data)
 
     #extract sensor data
     sensor_data = extractSensorValues(normal_data)
     
     # --> Currently here, trying to extract data from sensordatavalues
-    sensor_a = pd.concat([pd.DataFrame(x) for x in sensor_data['sensordatavalues']]).reset_index(level=0, drop=True)
-    print(sensor_a)
+
+
+    #Extract temperature data from sensor data
+    temperature = "temperature"
+    temperature_data = sensor_data_values(sensor_data, temperature)
+
+    #Extract pressure data from sensor data
+    pressure = "pressure"
+    pressure_data = sensor_data_values(sensor_data, pressure)
+
+
+    #Extract P1 data from sensor data
+    p1 = "P1"
+    p1_data=sensor_data_values(sensor_data,p1)
+
+
+    # Extract P2 data from sensor data
+    p2 = "P2"
+    p2_data = sensor_data_values(sensor_data, p2)
+
 
     #transform sendor dataframe to dictionary
-    sensor_dict = (dataframe_to_dictionary(sensor_data))
+    # sensor_dict = (dataframe_to_dictionary(sensor_data))
 
 #normalize the sensor data transformed to dictionary
-    normal_sensor_data = normalize(sensor_dict)
-    print(normal_sensor_data==sensor_data)
-
-
-#extract time and location
-    extractTime_Location()
+    # normal_sensor_data = normalize(sensor_dict)
+    # print(normal_sensor_data==sensor_data)
 
     #save to exel
-    dataFrametoExel(normal_sensor_data, 'sensor.xlsx')
+    # dataFrametoExel(normal_sensor_data, 'sensor.xlsx')
 
 if __name__ == "__main__":
     main()
